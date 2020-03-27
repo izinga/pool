@@ -3,22 +3,21 @@ package pool
 import (
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 )
 
 // channelPool implements the Pool interface based on buffered channels.
 type channelPool struct {
-	// storage for our net.Conn connections
+	// storage for our Client connections
 	mu    sync.RWMutex
-	conns chan net.Conn
+	conns chan Client
 
-	// net.Conn generator
+	// Client generator
 	factory Factory
 }
 
 // Factory is a function to create new connections.
-type Factory func() (net.Conn, error)
+type Factory func() (Client, error)
 
 // NewChannelPool returns a new pool based on buffered channels with an initial
 // capacity and maximum capacity. Factory is used when initial capacity is
@@ -32,7 +31,7 @@ func NewChannelPool(initialCap, maxCap int, factory Factory) (Pool, error) {
 	}
 
 	c := &channelPool{
-		conns:   make(chan net.Conn, maxCap),
+		conns:   make(chan Client, maxCap),
 		factory: factory,
 	}
 
@@ -50,7 +49,7 @@ func NewChannelPool(initialCap, maxCap int, factory Factory) (Pool, error) {
 	return c, nil
 }
 
-func (c *channelPool) getConnsAndFactory() (chan net.Conn, Factory) {
+func (c *channelPool) getConnsAndFactory() (chan Client, Factory) {
 	c.mu.RLock()
 	conns := c.conns
 	factory := c.factory
@@ -61,13 +60,13 @@ func (c *channelPool) getConnsAndFactory() (chan net.Conn, Factory) {
 // Get implements the Pool interfaces Get() method. If there is no new
 // connection available in the pool, a new connection will be created via the
 // Factory() method.
-func (c *channelPool) Get() (net.Conn, error) {
+func (c *channelPool) Get() (Client, error) {
 	conns, factory := c.getConnsAndFactory()
 	if conns == nil {
 		return nil, ErrClosed
 	}
 
-	// wrap our connections with out custom net.Conn implementation (wrapConn
+	// wrap our connections with out custom Client implementation (wrapConn
 	// method) that puts the connection back to the pool if it's closed.
 	select {
 	case conn := <-conns:
@@ -88,7 +87,7 @@ func (c *channelPool) Get() (net.Conn, error) {
 
 // put puts the connection back to the pool. If the pool is full or closed,
 // conn is simply closed. A nil conn will be rejected.
-func (c *channelPool) put(conn net.Conn) error {
+func (c *channelPool) put(conn Client) error {
 	if conn == nil {
 		return errors.New("connection is nil. rejecting")
 	}
