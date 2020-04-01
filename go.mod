@@ -1,3 +1,3 @@
-module github.com/kiyor/pool
+module github.com/kiyor/pool/v4
 
 go 1.14
